@@ -1,26 +1,167 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * MedBridge theme
+ *
+ * Calm clinical teal for the brand, plus four status colours that carry
+ * meaning across the whole platform:
+ *   stop     (red)    STOP decisions, high-severity flags
+ *   continue (green)  CONTINUE decisions, confirmed items
+ *   new      (blue)   NEW medicines, information
+ *   change   (amber)  CHANGE decisions, moderate flags, items to check
+ *
+ * Never use a status colour on its own: always pair it with an icon and a
+ * word (see DecisionBadge), so it works for colour-blind users.
+ * All text/background pairs below meet WCAG AA (4.5:1) in light and dark.
+ *
+ * Use tokens through Tailwind: bg-surface, text-muted, bg-primary,
+ * text-stop, bg-stop-soft, border-border, rounded-card, shadow-card ...
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --bg: #f6f8f8;
+  --surface: #ffffff;
+  --surface-muted: #eef3f3;
+  --border: #d8e2e1;
+  --border-strong: #b7c6c4;
+  --text: #0f1f1e;
+  --muted: #4a5e5c;
+
+  --primary: #0b6b66;
+  --primary-hover: #08544f;
+  --primary-soft: #e2f1ef;
+  --on-primary: #ffffff;
+  --ring: #0b6b66;
+
+  --stop: #b42318;
+  --stop-soft: #fdecea;
+  --on-stop: #ffffff;
+  --continue: #146c36;
+  --continue-soft: #e6f4ea;
+  --new: #1d57c2;
+  --new-soft: #e8effc;
+  --change: #8a5100;
+  --change-soft: #fcf1de;
+
+  --shadow-card: 0 1px 2px rgb(15 31 30 / 0.06), 0 1px 3px rgb(15 31 30 / 0.04);
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #0b1313;
+    --surface: #111c1c;
+    --surface-muted: #172424;
+    --border: #253534;
+    --border-strong: #36504e;
+    --text: #e4eeed;
+    --muted: #9aafad;
+
+    --primary: #3cc2b4;
+    --primary-hover: #62d3c7;
+    --primary-soft: #10302c;
+    --on-primary: #04211e;
+    --ring: #3cc2b4;
+
+    --stop: #f97066;
+    --stop-soft: #3a1714;
+    --on-stop: #2a0b08;
+    --continue: #4acb87;
+    --continue-soft: #0f2c1c;
+    --new: #86aef8;
+    --new-soft: #15233f;
+    --change: #f2b23e;
+    --change-soft: #352509;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="dark"] {
+  --bg: #0b1313;
+  --surface: #111c1c;
+  --surface-muted: #172424;
+  --border: #253534;
+  --border-strong: #36504e;
+  --text: #e4eeed;
+  --muted: #9aafad;
+
+  --primary: #3cc2b4;
+  --primary-hover: #62d3c7;
+  --primary-soft: #10302c;
+  --on-primary: #04211e;
+  --ring: #3cc2b4;
+
+  --stop: #f97066;
+  --stop-soft: #3a1714;
+  --on-stop: #2a0b08;
+  --continue: #4acb87;
+  --continue-soft: #0f2c1c;
+  --new: #86aef8;
+  --new-soft: #15233f;
+  --change: #f2b23e;
+  --change-soft: #352509;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-ring: var(--ring);
+
+  --color-stop: var(--stop);
+  --color-stop-soft: var(--stop-soft);
+  --color-on-stop: var(--on-stop);
+  --color-continue: var(--continue);
+  --color-continue-soft: var(--continue-soft);
+  --color-new: var(--new);
+  --color-new-soft: var(--new-soft);
+  --color-change: var(--change);
+  --color-change-soft: var(--change-soft);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+
+  --shadow-card: var(--shadow-card);
+}
+
+/* Slightly larger base text: many patients are older adults. */
+html {
+  font-size: 106.25%; /* 17px */
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  line-height: 1.55;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Dose times and quantities line up in lists. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }

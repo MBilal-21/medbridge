@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Prescription photos are up to 10 MB.
+    serverActions: { bodySizeLimit: "11mb" },
+  },
   turbopack: {
     rules: {
       "*.css": {
