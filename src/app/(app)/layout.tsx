@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { AppHeader, AppHeaderFrame } from "@/components/app-header";
+import { LiveRefresh } from "@/components/live-refresh";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex flex-1 flex-col">
+      <LiveRefresh />
       <Suspense fallback={<AppHeaderFrame />}>
         <AppHeader />
       </Suspense>
