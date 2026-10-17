@@ -11,7 +11,10 @@ const nav: Record<CurrentUser["role"], { href: string; label: string }[]> = {
     { href: "/patient/uploads", label: "Prescription photos" },
   ],
   doctor: [{ href: "/doctor", label: "Appointments" }],
-  admin: [{ href: "/admin", label: "Doctor applications" }],
+  admin: [
+    { href: "/admin", label: "Doctor applications" },
+    { href: "/admin/patients", label: "Patients" },
+  ],
 };
 
 const roleLabel: Record<CurrentUser["role"], string> = {
