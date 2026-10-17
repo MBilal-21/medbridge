@@ -17,7 +17,10 @@ import {
   formatDateTime,
 } from "@/components/page-parts";
 import { requireRole } from "@/lib/auth";
+import { cn } from "@/lib/cn";
+import { findProblems, type NewFlag } from "@/lib/drugs";
 import { loadReview } from "@/lib/review";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { DecisionForm } from "./decision-form";
 import { PrescriptionForm } from "./prescription-form";
@@ -75,6 +78,28 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
   const patient = appointment.profiles;
   const unconfirmed = medicines?.filter((m) => m.source === "photo_upload" && !m.decision) ?? [];
 
+  // Problems already in the current list, before the doctor prescribes anything.
+  // Only runs when RLS showed this doctor the list (the patient shared it).
+  // Uses stored data only, so it is instant; saving a prescription runs the full check.
+  const problems =
+    !pending && medicines?.length
+      ? (await findProblems(createAdminClient(), appointment.patient_id, { checkLabels: false })).flags
+      : [];
+  const problemsByMedicine = new Map<string, { text: string; severity: NewFlag["severity"] }[]>();
+  for (const f of problems) {
+    const [a, b] = f.medicines;
+    const note = (other: string) =>
+      f.type === "unclear"
+        ? "Not in drug database"
+        : f.type === "duplicate"
+          ? `Same medicine as ${other}`
+          : `Interacts with ${other}`;
+    const add = (id: string | null, text: string) =>
+      id && problemsByMedicine.set(id, [...(problemsByMedicine.get(id) ?? []), { text, severity: f.severity }]);
+    add(f.medication_a_id, note(b));
+    add(f.medication_b_id, note(a));
+  }
+
   return (
     <>
       <PageTitle
@@ -131,6 +156,30 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
               </EmptyState>
             ) : (
               <>
+                {problems.some((f) => f.type !== "unclear") && (
+                  <div className="mb-4 flex flex-col gap-3">
+                    {problems
+                      .filter((f) => f.type !== "unclear")
+                      .map((f, i) => (
+                        <FlagAlert
+                          key={i}
+                          type={f.type}
+                          severity={f.severity}
+                          title={
+                            f.type === "duplicate"
+                              ? `${f.medicines[0]} and ${f.medicines[1]} are the same medicine`
+                              : `${f.medicines[0]} + ${f.medicines[1]}`
+                          }
+                          source={f.source}
+                        >
+                          <p className="text-sm">
+                            <span className="font-medium">Database finding: </span>
+                            {f.finding}
+                          </p>
+                        </FlagAlert>
+                      ))}
+                  </div>
+                )}
                 {unconfirmed.length > 0 && (
                   <p className="mb-3 flex items-center gap-2 rounded-control bg-change-soft px-3 py-2 text-sm font-medium text-change">
                     <WarningIcon className="size-4 shrink-0" />
@@ -153,6 +202,14 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           <Tag>{m.source === "photo_upload" ? "From photo" : "MedBridge"}</Tag>
                           {m.prescribed_by && <Tag>{m.prescribed_by}</Tag>}
+                          {m.source === "photo_upload" && !m.decision && (
+                            <ProblemTag tone="moderate">Not reviewed by a doctor</ProblemTag>
+                          )}
+                          {problemsByMedicine.get(m.medication_id!)?.map((p) => (
+                            <ProblemTag key={p.text} tone={p.severity}>
+                              {p.text}
+                            </ProblemTag>
+                          ))}
                         </div>
                       </div>
                       {m.decision && <DecisionBadge decision={m.decision} />}
@@ -167,6 +224,27 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
         </>
       )}
     </>
+  );
+}
+
+const problemTones = {
+  high: "border-stop bg-stop-soft text-stop",
+  moderate: "border-change bg-change-soft text-change",
+  low: "border-border-strong bg-surface-muted text-muted",
+} as const;
+
+/** A problem on one medicine row. Icon + words, never colour alone. */
+function ProblemTag({ tone, children }: { tone: keyof typeof problemTones; children: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-medium",
+        problemTones[tone],
+      )}
+    >
+      <WarningIcon className="size-3.5 shrink-0" />
+      {children}
+    </span>
   );
 }
 

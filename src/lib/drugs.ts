@@ -164,8 +164,9 @@ export type NewFlag = {
  * Checks a patient's full active medicine list with fixed rules: shared active
  * ingredients are duplicates, and ingredient pairs are looked up in the
  * interaction table, then in FDA labels. No AI is involved in finding problems.
+ * With `checkLabels: false` it uses only the stored tables, for a fast preview.
  */
-export async function findProblems(admin: Admin, patientId: string) {
+export async function findProblems(admin: Admin, patientId: string, { checkLabels = true } = {}) {
   const { data: meds } = await admin
     .from("medications")
     .select(
@@ -239,7 +240,9 @@ export async function findProblems(admin: Admin, patientId: string) {
 
     const results = await Promise.all(
       [...pairs.entries()].map(async ([key, p]) => {
-        const hit = knownMap.get(key) ?? (await fdaLabelMention(usName(names.get(p.x)!), usName(names.get(p.y)!)));
+        const hit =
+          knownMap.get(key) ??
+          (checkLabels ? await fdaLabelMention(usName(names.get(p.x)!), usName(names.get(p.y)!)) : null);
         if (hit && !knownMap.has(key)) {
           // Save FDA label findings so later checks are instant and give the same answer.
           await admin.from("drug_interactions").upsert(
