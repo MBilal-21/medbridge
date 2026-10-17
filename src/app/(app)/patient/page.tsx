@@ -5,9 +5,10 @@ import { cancelAppointment } from "@/app/actions/patient";
 import { DecisionBadge, Tag } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { CameraIcon, WarningIcon } from "@/components/ui/icons";
+import { CalendarIcon, CameraIcon, WarningIcon } from "@/components/ui/icons";
 import { EmptyState, LoadingBlock, PageTitle, formatDateTime } from "@/components/page-parts";
 import { requireRole } from "@/lib/auth";
+import { decisionOrder, loadReview } from "@/lib/review";
 import { createClient } from "@/lib/supabase/server";
 import { AppointmentStatus } from "@/components/appointment-status";
 
@@ -42,7 +43,7 @@ async function PatientDashboard() {
   const user = await requireRole("patient");
   const supabase = await createClient();
 
-  const [{ data: medicines }, { data: appointments }] = await Promise.all([
+  const [{ data: medicines }, { data: appointments }, { data: latestCheck }] = await Promise.all([
     supabase
       .from("patient_medication_list")
       .select("*")
@@ -55,7 +56,16 @@ async function PatientDashboard() {
       .eq("patient_id", user.id)
       .order("scheduled_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("reconciliation_checks")
+      .select("id")
+      .eq("patient_id", user.id)
+      .eq("status", "reviewed")
+      .order("reviewed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+  const review = latestCheck ? await loadReview(supabase, latestCheck.id) : null;
 
   return (
     <>
@@ -66,6 +76,47 @@ async function PatientDashboard() {
           <Link href="/doctor/apply" className={buttonClasses("primary", "md", "mt-3")}>
             Apply as a doctor
           </Link>
+        </Card>
+      )}
+
+      {review && review.items.length > 0 && (
+        <Card>
+          <CardHeader
+            title={`Your list from ${review.doctorName}`}
+            description={review.reviewedAt ? `Checked ${formatDateTime(review.reviewedAt)}. Follow this list.` : undefined}
+            action={
+              <a href="/patient/calendar" download className={buttonClasses("secondary")}>
+                <CalendarIcon className="size-5" />
+                Add to calendar
+              </a>
+            }
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {decisionOrder.map((d) => {
+              const items = review.items.filter((i) => i.decision === d);
+              if (!items.length) return null;
+              return (
+                <div key={d} className="rounded-control border border-border p-4">
+                  <DecisionBadge decision={d} />
+                  <ul className="mt-3 flex flex-col gap-3">
+                    {items.map((i) => (
+                      <li key={i.id}>
+                        <p className="font-semibold">{i.name}</p>
+                        {d !== "stop" && (
+                          <p className="tabular text-sm text-muted">
+                            {[i.dose, i.frequency, i.dose_times.map((t) => t.slice(0, 5)).join(", "), i.instructions]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
+                        {i.note && <p className="text-sm">Doctor&apos;s note: {i.note}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         </Card>
       )}
 

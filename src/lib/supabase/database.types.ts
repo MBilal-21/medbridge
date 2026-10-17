@@ -67,6 +67,7 @@ export type Database = {
           ai_explanation: string | null
           check_id: string
           created_at: string
+          finding: string
           id: string
           ingredient_rxcui: string | null
           medication_a_id: string
@@ -79,6 +80,7 @@ export type Database = {
           ai_explanation?: string | null
           check_id: string
           created_at?: string
+          finding?: string
           id?: string
           ingredient_rxcui?: string | null
           medication_a_id: string
@@ -91,6 +93,7 @@ export type Database = {
           ai_explanation?: string | null
           check_id?: string
           created_at?: string
+          finding?: string
           id?: string
           ingredient_rxcui?: string | null
           medication_a_id?: string

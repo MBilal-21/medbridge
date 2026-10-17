@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState, LoadingBlock, PageTitle, formatDateTime } from "@/components/page-parts";
 import { requireRole } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { RejectForm } from "./reject-form";
 
@@ -18,10 +19,51 @@ export default function AdminHome() {
         title="Doctor applications"
         description="Check each license number before approving. Only approved doctors can see patient data."
       />
+      <Suspense fallback={<LoadingBlock lines={1} />}>
+        <DemoResults />
+      </Suspense>
       <Suspense fallback={<LoadingBlock lines={4} />}>
         <Applications />
       </Suspense>
     </>
+  );
+}
+
+/** Totals across every check, for the "[X] prescriptions -> [Y] duplicates..." demo line. */
+async function DemoResults() {
+  await requireRole("admin");
+  // Checks are private to each doctor and patient; the totals are read with the service role.
+  const admin = createAdminClient();
+  const [{ data: checks }, { data: flags }] = await Promise.all([
+    admin.from("reconciliation_checks").select("medications_checked, duration_ms"),
+    admin.from("check_flags").select("type"),
+  ]);
+  if (!checks?.length) return null;
+
+  const timed = checks.filter((c) => c.duration_ms !== null);
+  const avgSeconds = timed.length
+    ? timed.reduce((sum, c) => sum + c.duration_ms!, 0) / timed.length / 1000
+    : 0;
+  const stats = [
+    { label: "Prescriptions checked", value: checks.length },
+    { label: "Medicines checked", value: checks.reduce((sum, c) => sum + c.medications_checked, 0) },
+    { label: "Duplicates caught", value: flags?.filter((f) => f.type === "duplicate").length ?? 0 },
+    { label: "Interactions caught", value: flags?.filter((f) => f.type === "interaction").length ?? 0 },
+    { label: "Average check time", value: `${avgSeconds.toFixed(1)} s` },
+  ];
+
+  return (
+    <Card>
+      <CardHeader title="Demo results" description="Every medicine check run in MedBridge so far." />
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        {stats.map((s) => (
+          <div key={s.label}>
+            <dt className="text-sm text-muted">{s.label}</dt>
+            <dd className="tabular text-2xl font-semibold">{s.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
 

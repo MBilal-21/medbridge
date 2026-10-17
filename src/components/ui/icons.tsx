@@ -69,6 +69,12 @@ export const CameraIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const CalendarIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 6.5h16V20H4zM4 10.5h16M8.5 4v4M15.5 4v4" />
+  </Icon>
+);
+
 export const BridgeIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M3 17c3-6 6-8 9-8s6 2 9 8" />
