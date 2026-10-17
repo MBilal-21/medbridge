@@ -231,3 +231,10 @@ export async function deleteUpload(uploadId: string) {
   if (upload) await supabase.storage.from("prescription-photos").remove([upload.storage_path]);
   refresh();
 }
+
+export async function setDoseReminders(enabled: boolean) {
+  const user = await requireRole("patient");
+  const supabase = await createClient();
+  await supabase.from("profiles").update({ dose_reminders: enabled }).eq("id", user.id);
+  refresh();
+}

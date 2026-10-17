@@ -1,25 +1,29 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { cancelAppointment } from "@/app/actions/patient";
+import { cancelAppointment, setDoseReminders } from "@/app/actions/patient";
+import { AppointmentStatus } from "@/components/appointment-status";
 import { DecisionBadge, Tag } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { CalendarIcon, CameraIcon, WarningIcon } from "@/components/ui/icons";
-import { EmptyState, LoadingBlock, PageTitle, formatDateTime } from "@/components/page-parts";
+import { CalendarIcon, CameraIcon, StopIcon, WarningIcon } from "@/components/ui/icons";
+import { EmptyState, LoadingBlock, PageTitle, formatDate, formatDateTime } from "@/components/page-parts";
 import { requireRole } from "@/lib/auth";
-import { decisionOrder, loadReview } from "@/lib/review";
+import { cn } from "@/lib/cn";
+import { formatTime, nowInPakistan, slotFor, slotLabels } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
-import { AppointmentStatus } from "@/components/appointment-status";
+import type { Database } from "@/lib/supabase/database.types";
 
 export const metadata: Metadata = { title: "My medicines" };
+
+type Medicine = Database["public"]["Views"]["patient_medication_list"]["Row"];
 
 export default function PatientHome() {
   return (
     <>
       <PageTitle
         title="My medicines"
-        description="Every medicine from every doctor, in one list."
+        description="Every medicine from every doctor, packed by the time you take it."
         action={
           <div className="flex flex-wrap gap-2">
             <Link href="/patient/uploads" className={buttonClasses("secondary")}>
@@ -43,29 +47,35 @@ async function PatientDashboard() {
   const user = await requireRole("patient");
   const supabase = await createClient();
 
-  const [{ data: medicines }, { data: appointments }, { data: latestCheck }] = await Promise.all([
-    supabase
-      .from("patient_medication_list")
-      .select("*")
-      .eq("patient_id", user.id)
-      .eq("status", "active")
-      .order("name_as_written"),
-    supabase
-      .from("appointments")
-      .select("id, scheduled_at, status, reason, doctors(specialty, profiles!doctors_profile_id_fkey(full_name))")
-      .eq("patient_id", user.id)
-      .order("scheduled_at", { ascending: false })
-      .limit(10),
-    supabase
-      .from("reconciliation_checks")
-      .select("id")
-      .eq("patient_id", user.id)
-      .eq("status", "reviewed")
-      .order("reviewed_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-  const review = latestCheck ? await loadReview(supabase, latestCheck.id) : null;
+  const [{ data: medicines }, { data: appointments }, { data: profile }, { data: latestCheck }] =
+    await Promise.all([
+      supabase
+        .from("patient_medication_list")
+        .select("*")
+        .eq("patient_id", user.id)
+        .in("status", ["active", "stopped"])
+        .order("name_as_written"),
+      supabase
+        .from("appointments")
+        .select("id, scheduled_at, status, reason, doctors(specialty, profiles!doctors_profile_id_fkey(full_name))")
+        .eq("patient_id", user.id)
+        .order("scheduled_at", { ascending: false })
+        .limit(10),
+      supabase.from("profiles").select("dose_reminders").eq("id", user.id).single(),
+      supabase
+        .from("reconciliation_checks")
+        .select("reviewed_at, doctors(profiles!doctors_profile_id_fkey(full_name))")
+        .eq("patient_id", user.id)
+        .eq("status", "reviewed")
+        .order("reviewed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const active = medicines?.filter((m) => m.status === "active") ?? [];
+  const stopped = (medicines?.filter((m) => m.status === "stopped") ?? []).sort((a, b) =>
+    (b.decided_at ?? "").localeCompare(a.decided_at ?? ""),
+  );
 
   return (
     <>
@@ -79,81 +89,53 @@ async function PatientDashboard() {
         </Card>
       )}
 
-      {review && review.items.length > 0 && (
-        <Card>
-          <CardHeader
-            title={`Your list from ${review.doctorName}`}
-            description={review.reviewedAt ? `Checked ${formatDateTime(review.reviewedAt)}. Follow this list.` : undefined}
-            action={
+      <Card>
+        <CardHeader
+          title="Your medicine pack"
+          description={
+            latestCheck?.reviewed_at
+              ? `Checked by ${latestCheck.doctors?.profiles?.full_name || "your doctor"} on ${formatDate(latestCheck.reviewed_at)}. Take each compartment at its time.`
+              : "Take each compartment at its time. Times are set from how often each medicine is prescribed."
+          }
+          action={
+            active.some((m) => m.dose_times?.length) && (
               <a href="/patient/calendar" download className={buttonClasses("secondary")}>
                 <CalendarIcon className="size-5" />
                 Add to calendar
               </a>
-            }
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            {decisionOrder.map((d) => {
-              const items = review.items.filter((i) => i.decision === d);
-              if (!items.length) return null;
-              return (
-                <div key={d} className="rounded-control border border-border p-4">
-                  <DecisionBadge decision={d} />
-                  <ul className="mt-3 flex flex-col gap-3">
-                    {items.map((i) => (
-                      <li key={i.id}>
-                        <p className="font-semibold">{i.name}</p>
-                        {d !== "stop" && (
-                          <p className="tabular text-sm text-muted">
-                            {[i.dose, i.frequency, i.dose_times.map((t) => t.slice(0, 5)).join(", "), i.instructions]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        )}
-                        {i.note && <p className="text-sm">Doctor&apos;s note: {i.note}</p>}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
+            )
+          }
+        />
+        {!active.length ? (
+          <EmptyState title="No medicines yet">Upload a photo of an old prescription, or book a doctor.</EmptyState>
+        ) : (
+          <>
+            <Pack medicines={active} />
+            <ReminderSetting enabled={profile?.dose_reminders ?? true} email={user.email} />
+          </>
+        )}
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
         <Card>
           <CardHeader
-            title="Current medicines"
-            description="Decisions are made by your doctor after checking the full list."
+            title="Stopped medicines"
+            description="Your doctor told you to stop these. Don't take them, even if you still have some at home."
           />
-          {!medicines?.length ? (
-            <EmptyState title="No medicines yet">
-              Upload a photo of an old prescription, or book a doctor.
-            </EmptyState>
+          {!stopped.length ? (
+            <EmptyState title="Nothing stopped" />
           ) : (
             <ul className="divide-y divide-border">
-              {medicines.map((m) => (
-                <li key={m.medication_id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+              {stopped.map((m) => (
+                <li key={m.medication_id} className="flex items-start gap-3 py-3">
+                  <StopIcon className="mt-0.5 size-5 shrink-0 text-stop" />
                   <div>
-                    <p className="font-semibold">{m.brand_name ?? m.name_as_written}</p>
-                    <p className="tabular text-sm text-muted">
-                      {[m.dose, m.frequency, m.dose_times?.map((t) => t.slice(0, 5)).join(", ")]
-                        .filter(Boolean)
-                        .join(" · ") || "No dose details"}
+                    <p className="font-semibold line-through decoration-stop/60">{m.brand_name ?? m.name_as_written}</p>
+                    <p className="text-sm text-muted">
+                      {[m.dose, m.decided_at && `Stopped ${formatDate(m.decided_at)}`].filter(Boolean).join(" · ")}
                     </p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <Tag>{m.source === "photo_upload" ? "From photo" : "MedBridge doctor"}</Tag>
-                      {m.prescribed_by && <Tag>{m.prescribed_by}</Tag>}
-                    </div>
+                    {m.decision_note && <p className="mt-0.5 text-sm">Doctor&apos;s note: {m.decision_note}</p>}
                   </div>
-                  {m.decision ? (
-                    <DecisionBadge decision={m.decision} />
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-sm text-muted">
-                      <WarningIcon className="size-4" />
-                      Not reviewed yet
-                    </span>
-                  )}
                 </li>
               ))}
             </ul>
@@ -194,5 +176,107 @@ async function PatientDashboard() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** Compartments by dose time, like a weekly pill organiser, plus "when needed". */
+function Pack({ medicines }: { medicines: Medicine[] }) {
+  const byTime = new Map<string, Medicine[]>();
+  for (const m of medicines) {
+    for (const t of m.dose_times ?? []) {
+      const time = t.slice(0, 5);
+      byTime.set(time, [...(byTime.get(time) ?? []), m]);
+    }
+  }
+  const times = [...byTime.keys()].sort();
+  const now = nowInPakistan().time;
+  const next = times.find((t) => t > now) ?? times[0];
+  const asNeeded = medicines.filter((m) => !m.dose_times?.length);
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {times.map((time) => (
+        <section
+          key={time}
+          aria-label={`${slotLabels[slotFor(time)]}, ${formatTime(time)}`}
+          className={cn(
+            "flex flex-col rounded-card border-2 p-4",
+            time === next ? "border-primary bg-primary-soft/40" : "border-border",
+          )}
+        >
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h3 className="font-semibold">{slotLabels[slotFor(time)]}</h3>
+            <span className="tabular text-sm font-medium text-muted">
+              {time === next && <span className="mr-1.5 text-primary">Next ·</span>}
+              {formatTime(time)}
+            </span>
+          </div>
+          <PackItems medicines={byTime.get(time)!} />
+        </section>
+      ))}
+      {asNeeded.length > 0 && (
+        <section aria-label="Only when needed" className="flex flex-col rounded-card border-2 border-dashed border-border-strong p-4">
+          <div className="mb-3">
+            <h3 className="font-semibold">Only when needed</h3>
+            <p className="text-sm text-muted">No fixed time</p>
+          </div>
+          <PackItems medicines={asNeeded} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function PackItems({ medicines }: { medicines: Medicine[] }) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {medicines.map((m) => (
+        <li key={m.medication_id}>
+          <p className="font-semibold">
+            {m.brand_name ?? m.name_as_written}
+            {m.dose && <span className="font-normal text-muted"> · {m.dose}</span>}
+          </p>
+          {m.instructions && <p className="text-sm text-muted">{m.instructions}</p>}
+          {m.decision === "change" && m.decision_note && <p className="text-sm">Change: {m.decision_note}</p>}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(m.decision === "new" || m.decision === "change") && <DecisionBadge decision={m.decision} />}
+            {!m.decision && m.source === "photo_upload" && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-change">
+                <WarningIcon className="size-4" />
+                Not checked by a doctor yet
+              </span>
+            )}
+            {m.prescribed_by && <Tag>{m.prescribed_by}</Tag>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReminderSetting({ enabled, email }: { enabled: boolean; email: string }) {
+  return (
+    <div
+      id="reminders"
+      className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-control bg-surface-muted px-4 py-3"
+    >
+      <p className="text-sm">
+        {enabled ? (
+          <>
+            <span className="font-semibold">Email reminders are on.</span> We email {email} at each dose time.
+          </>
+        ) : (
+          <>
+            <span className="font-semibold">Email reminders are off.</span> Turn them on to get an email at each dose
+            time.
+          </>
+        )}
+      </p>
+      <form action={setDoseReminders.bind(null, !enabled)}>
+        <button type="submit" className={buttonClasses(enabled ? "ghost" : "primary")}>
+          {enabled ? "Turn off" : "Turn on reminders"}
+        </button>
+      </form>
+    </div>
   );
 }

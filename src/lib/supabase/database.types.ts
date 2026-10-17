@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string
+          value: string
+        }
+        Insert: {
+          key: string
+          value: string
+        }
+        Update: {
+          key?: string
+          value?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           created_at: string
@@ -192,6 +207,44 @@ export type Database = {
           {
             foreignKeyName: "doctors_verified_by_fkey"
             columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dose_reminders: {
+        Row: {
+          created_at: string
+          due_at: string
+          error: string | null
+          id: string
+          medication_ids: string[]
+          patient_id: string
+          sent_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          due_at: string
+          error?: string | null
+          id?: string
+          medication_ids: string[]
+          patient_id: string
+          sent_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          due_at?: string
+          error?: string | null
+          id?: string
+          medication_ids?: string[]
+          patient_id?: string
+          sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dose_reminders_patient_id_fkey"
+            columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -590,6 +643,7 @@ export type Database = {
         Row: {
           created_at: string
           date_of_birth: string | null
+          dose_reminders: boolean
           email: string
           full_name: string
           id: string
@@ -599,6 +653,7 @@ export type Database = {
         Insert: {
           created_at?: string
           date_of_birth?: string | null
+          dose_reminders?: boolean
           email: string
           full_name?: string
           id: string
@@ -608,6 +663,7 @@ export type Database = {
         Update: {
           created_at?: string
           date_of_birth?: string | null
+          dose_reminders?: boolean
           email?: string
           full_name?: string
           id?: string
