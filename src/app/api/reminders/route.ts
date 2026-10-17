@@ -14,5 +14,10 @@ export async function POST(request: Request) {
   if (!secret || given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return new Response("Unauthorized", { status: 401 });
   }
-  return Response.json(await sendDueReminders(admin));
+  const result = await sendDueReminders(admin);
+  // Lets us confirm the schedule is running.
+  await admin
+    .from("app_settings")
+    .upsert({ key: "reminders_last_run", value: JSON.stringify({ at: new Date().toISOString(), ...result }) });
+  return Response.json(result);
 }
