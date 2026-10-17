@@ -238,3 +238,35 @@ export async function setDoseReminders(enabled: boolean) {
   await supabase.from("profiles").update({ dose_reminders: enabled }).eq("id", user.id);
   refresh();
 }
+
+/** Lets a doctor see the patient's full medicine history, without an appointment. */
+export async function shareHistory(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireRole("patient");
+  const parsed = z.uuid().safeParse(formData.get("doctor_id"));
+  if (!parsed.success) return { error: "Choose a doctor." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("history_shares")
+    .insert({ patient_id: user.id, doctor_id: parsed.data });
+  // 23505: already shared with this doctor, which is what the patient wanted.
+  if (error && error.code !== "23505") return { error: "Could not share. Please try again." };
+
+  refresh();
+  return { success: "Shared. The doctor can now see your medicine history." };
+}
+
+/** Removes a doctor's access, both the direct share and through appointments. */
+export async function stopSharing(doctorId: string) {
+  const user = await requireRole("patient");
+  const supabase = await createClient();
+  await Promise.all([
+    supabase.from("history_shares").delete().eq("patient_id", user.id).eq("doctor_id", doctorId),
+    supabase
+      .from("appointments")
+      .update({ share_history: false })
+      .eq("patient_id", user.id)
+      .eq("doctor_id", doctorId),
+  ]);
+  refresh();
+}

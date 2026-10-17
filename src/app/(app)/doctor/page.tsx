@@ -24,12 +24,19 @@ async function DoctorDashboard() {
   if (user.doctorStatus !== "approved") return <VerificationStatus user={user} />;
 
   const supabase = await createClient();
-  const { data: appointments } = await supabase
-    .from("appointments")
-    .select("id, scheduled_at, status, reason, share_history, profiles!appointments_patient_id_fkey(full_name)")
-    .eq("doctor_id", user.id)
-    .in("status", ["requested", "confirmed"])
-    .order("scheduled_at");
+  const [{ data: appointments }, { data: shares }] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("id, scheduled_at, status, reason, share_history, profiles!appointments_patient_id_fkey(full_name)")
+      .eq("doctor_id", user.id)
+      .in("status", ["requested", "confirmed"])
+      .order("scheduled_at"),
+    supabase
+      .from("history_shares")
+      .select("patient_id, created_at, profiles(full_name)")
+      .eq("doctor_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   return (
     <>
@@ -67,6 +74,30 @@ async function DoctorDashboard() {
                     Open
                   </Link>
                 </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Shared with you"
+          description="Patients who gave you access to their full medicine history, without an appointment."
+        />
+        {!shares?.length ? (
+          <EmptyState title="No patient has shared their history yet" />
+        ) : (
+          <ul className="divide-y divide-border">
+            {shares.map((s) => (
+              <li key={s.patient_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="font-semibold">{s.profiles?.full_name || "Patient"}</p>
+                  <p className="tabular text-sm text-muted">Shared {formatDateTime(s.created_at)}</p>
+                </div>
+                <Link href={`/doctor/patients/${s.patient_id}`} className={buttonClasses("secondary")}>
+                  View history
+                </Link>
               </li>
             ))}
           </ul>

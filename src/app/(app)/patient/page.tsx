@@ -13,6 +13,7 @@ import { cn } from "@/lib/cn";
 import { formatTime, nowInPakistan, slotFor, slotLabels } from "@/lib/schedule";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { MedicineTabs } from "./medicine-tabs";
 
 export const metadata: Metadata = { title: "My medicines" };
 
@@ -36,6 +37,7 @@ export default function PatientHome() {
           </div>
         }
       />
+      <MedicineTabs active="today" />
       <Suspense fallback={<LoadingBlock lines={4} />}>
         <PatientDashboard />
       </Suspense>
@@ -76,6 +78,19 @@ async function PatientDashboard() {
   const stopped = (medicines?.filter((m) => m.status === "stopped") ?? []).sort((a, b) =>
     (b.decided_at ?? "").localeCompare(a.decided_at ?? ""),
   );
+  const times = [...new Set(active.flatMap((m) => m.dose_times?.map((t) => t.slice(0, 5)) ?? []))].sort();
+  const nowTime = nowInPakistan().time;
+  const nextTime = times.find((t) => t > nowTime) ?? times[0];
+  const summary = [
+    { label: "Medicines to take", value: String(active.length), href: "/patient" },
+    {
+      label: "From doctors",
+      value: String(new Set(active.map((m) => m.prescribed_by).filter(Boolean)).size),
+      href: "/patient/history",
+    },
+    { label: "Next dose", value: nextTime ? formatTime(nextTime) : "None", href: "/patient" },
+    { label: "Stopped by a doctor", value: String(stopped.length), href: "#stopped" },
+  ];
 
   return (
     <>
@@ -88,6 +103,19 @@ async function PatientDashboard() {
           </Link>
         </Card>
       )}
+
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {summary.map((s) => (
+          <div key={s.label} className="rounded-card border border-border bg-surface p-4 shadow-card">
+            <dt className="text-sm text-muted">{s.label}</dt>
+            <dd className="tabular mt-1 text-2xl font-semibold">
+              <Link href={s.href} className="hover:underline">
+                {s.value}
+              </Link>
+            </dd>
+          </div>
+        ))}
+      </dl>
 
       <Card>
         <CardHeader
@@ -117,7 +145,7 @@ async function PatientDashboard() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <Card>
+        <Card id="stopped">
           <CardHeader
             title="Stopped medicines"
             description="Your doctor told you to stop these. Don't take them, even if you still have some at home."
