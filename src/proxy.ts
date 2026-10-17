@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { supabaseEnv } from "@/lib/supabase/env";
 
 const protectedPrefixes = ["/dashboard", "/patient", "/doctor", "/admin"];
 const authPages = ["/login", "/signup"];
@@ -12,9 +13,10 @@ const authPages = ["/login", "/signup"];
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  const { url: supabaseUrl, publishableKey } = supabaseEnv();
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    supabaseUrl,
+    publishableKey,
     {
       cookies: {
         getAll: () => request.cookies.getAll(),

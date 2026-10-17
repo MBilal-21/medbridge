@@ -1,11 +1,15 @@
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { AppHeader, AppHeaderFrame } from "@/components/app-header";
 import { LiveRefresh } from "@/components/live-refresh";
+import { supabaseEnv } from "@/lib/supabase/env";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex flex-1 flex-col">
-      <LiveRefresh />
+      <Suspense fallback={null}>
+        <LiveUpdates />
+      </Suspense>
       <Suspense fallback={<AppHeaderFrame />}>
         <AppHeader />
       </Suspense>
@@ -14,4 +18,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </main>
     </div>
   );
+}
+
+/** Reads the Supabase config per request, so it is never frozen into the build. */
+async function LiveUpdates() {
+  await connection();
+  const { url, publishableKey } = supabaseEnv();
+  return <LiveRefresh url={url} publishableKey={publishableKey} />;
 }

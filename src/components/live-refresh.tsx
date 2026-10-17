@@ -16,11 +16,13 @@ const TABLES = [
 ] as const;
 
 /** Re-renders the current page when data it may show changes in the database. */
-export function LiveRefresh() {
+export function LiveRefresh({ url, publishableKey }: { url: string; publishableKey: string }) {
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = createClient();
+    // Without config the page still works; it just won't update live.
+    if (!url || !publishableKey) return;
+    const supabase = createClient(url, publishableKey);
     let timer: ReturnType<typeof setTimeout> | undefined;
     // One save can touch several rows; refresh once after they settle.
     const refresh = () => {
@@ -44,7 +46,7 @@ export function LiveRefresh() {
       clearTimeout(timer);
       supabase.removeChannel(channel);
     };
-  }, [router]);
+  }, [router, url, publishableKey]);
 
   return null;
 }
