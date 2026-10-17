@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { updateAppointment } from "@/app/actions/doctor";
+import { reviewCurrentList } from "@/app/actions/prescription";
+import { SubmitButton } from "@/components/ui/form-parts";
 import { AppointmentStatus } from "@/components/appointment-status";
 import { DecisionBadge } from "@/components/ui/badge";
 import { buttonClasses } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import { CurrentMedicines } from "@/components/current-medicines";
 import { requireRole } from "@/lib/auth";
 import { loadReview } from "@/lib/review";
 import { createClient } from "@/lib/supabase/server";
-import { DecisionForm } from "./decision-form";
+import { DecisionForm, type DecisionMedicine } from "./decision-form";
 import { PrescriptionForm } from "./prescription-form";
 
 export const metadata: Metadata = { title: "Appointment" };
@@ -108,6 +110,22 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
         <CheckReview check={pending} medicines={medicines ?? []} />
       ) : (
         <>
+          {lastReviewed && <SentList checkId={lastReviewed.id} />}
+
+          {open && (medicines?.length ?? 0) > 0 && (
+            <Card className="border-primary">
+              <CardHeader
+                title="Review the current list"
+                description="Check every medicine the patient takes, then mark each one STOP, CONTINUE or CHANGE. No new prescription needed."
+                action={
+                  <form action={reviewCurrentList.bind(null, appointment.id)}>
+                    <SubmitButton pendingText="Checking…">Review list and decide</SubmitButton>
+                  </form>
+                }
+              />
+            </Card>
+          )}
+
           {open && (
             <Card>
               <CardHeader
@@ -124,7 +142,6 @@ async function Appointment({ params }: { params: Promise<{ id: string }> }) {
             historyHref={`/doctor/patients/${appointment.patient_id}`}
           />
 
-          {lastReviewed && <SentList checkId={lastReviewed.id} />}
         </>
       )}
     </>
@@ -145,7 +162,7 @@ async function CheckReview({
   check,
   medicines,
 }: {
-  check: { id: string; new_prescription_id: string; medications_checked: number; duration_ms: number | null };
+  check: { id: string; new_prescription_id: string | null; medications_checked: number; duration_ms: number | null };
   medicines: Medicine[];
 }) {
   const supabase = await createClient();
@@ -156,14 +173,25 @@ async function CheckReview({
         "id, type, severity, finding, ai_explanation, source, medication_a_id, medication_b_id, a:medications!check_flags_medication_a_id_fkey(name_as_written, drug_products(brand_name)), b:medications!check_flags_medication_b_id_fkey(name_as_written, drug_products(brand_name))",
       )
       .eq("check_id", check.id),
-    supabase.from("medications").select("id").eq("prescription_id", check.new_prescription_id),
+    check.new_prescription_id
+      ? supabase.from("medications").select("id").eq("prescription_id", check.new_prescription_id)
+      : Promise.resolve({ data: [] as { id: string }[] }),
   ]);
 
   const sorted = (flags ?? []).sort((x, y) => severityOrder[x.severity] - severityOrder[y.severity]);
-  const flagged = new Set(sorted.flatMap((f) => [f.medication_a_id, f.medication_b_id]));
   const newIds = new Set(newMeds?.map((m) => m.id));
   const nameOf = (m: { name_as_written: string; drug_products: { brand_name: string } | null } | null) =>
     m?.drug_products?.brand_name ?? m?.name_as_written ?? "Medicine";
+  // Each medicine's problems, worded for its row in the decision list.
+  const problems = new Map<string, DecisionMedicine["problems"]>();
+  const add = (id: string | null, text: string, severity: (typeof sorted)[number]["severity"]) =>
+    id && problems.set(id, [...(problems.get(id) ?? []), { text, severity }]);
+  for (const f of sorted) {
+    const word = (other: string) =>
+      f.type === "unclear" ? "Not in drug database" : f.type === "duplicate" ? `Same medicine as ${other}` : `Interacts with ${other}`;
+    add(f.medication_a_id, word(nameOf(f.b)), f.severity);
+    add(f.medication_b_id, word(nameOf(f.a)), f.severity);
+  }
   const duplicates = sorted.filter((f) => f.type === "duplicate").length;
   const interactions = sorted.filter((f) => f.type === "interaction").length;
 
@@ -215,7 +243,7 @@ async function CheckReview({
       <Card>
         <CardHeader
           title="Your decision for each medicine"
-          description="The patient receives exactly this list, marked STOP, CONTINUE, NEW and CHANGE."
+          description="Medicines with a warning are listed first. The patient receives exactly this list, marked STOP, CONTINUE, NEW and CHANGE."
         />
         <DecisionForm
           checkId={check.id}
@@ -225,7 +253,7 @@ async function CheckReview({
             details: [m.dose, m.frequency, m.instructions].filter(Boolean).join(" · "),
             prescribedBy: m.prescribed_by,
             isNew: newIds.has(m.medication_id!),
-            flagged: flagged.has(m.medication_id!),
+            problems: problems.get(m.medication_id!) ?? [],
           }))}
         />
       </Card>
@@ -238,9 +266,14 @@ async function SentList({ checkId }: { checkId: string }) {
   const review = await loadReview(supabase, checkId);
   if (!review?.items.length) return null;
   return (
-    <Card>
+    <Card className="border-continue">
       <CardHeader
-        title="List sent to the patient"
+        title={
+          <span className="flex items-center gap-2">
+            <CheckIcon className="size-5 text-continue" />
+            List sent to the patient
+          </span>
+        }
         description={review.reviewedAt ? `Sent ${formatDateTime(review.reviewedAt)}` : undefined}
       />
       <ul className="divide-y divide-border">

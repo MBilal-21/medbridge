@@ -716,7 +716,7 @@ export type Database = {
           duration_ms: number | null
           id: string
           medications_checked: number
-          new_prescription_id: string
+          new_prescription_id: string | null
           patient_id: string
           reviewed_at: string | null
           status: Database["public"]["Enums"]["check_status"]
@@ -728,7 +728,7 @@ export type Database = {
           duration_ms?: number | null
           id?: string
           medications_checked?: number
-          new_prescription_id: string
+          new_prescription_id?: string | null
           patient_id: string
           reviewed_at?: string | null
           status?: Database["public"]["Enums"]["check_status"]
@@ -740,7 +740,7 @@ export type Database = {
           duration_ms?: number | null
           id?: string
           medications_checked?: number
-          new_prescription_id?: string
+          new_prescription_id?: string | null
           patient_id?: string
           reviewed_at?: string | null
           status?: Database["public"]["Enums"]["check_status"]

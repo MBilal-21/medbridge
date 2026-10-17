@@ -108,23 +108,68 @@ export async function createPrescription(
     return { error: "Could not save the medicines. Please try again." };
   }
 
+  const result = await runCheck(admin, {
+    patientId: appointment.patient_id,
+    doctorId: user.id,
+    appointmentId: appointment.id,
+    prescriptionId: prescription.id,
+  });
+  if (!result) return { error: "The prescription was saved, but the check failed. Please try again." };
+
+  refresh();
+  return { success: checkSummary(result) };
+}
+
+/**
+ * Checks the current list and opens the doctor's STOP / CONTINUE / CHANGE
+ * decisions, without prescribing anything new.
+ */
+export async function reviewCurrentList(appointmentId: string) {
+  const user = await requireRole("doctor");
+  if (user.doctorStatus !== "approved") return;
+  const supabase = await createClient();
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("id, patient_id")
+    .eq("id", appointmentId)
+    .eq("doctor_id", user.id)
+    .in("status", ["requested", "confirmed"])
+    .maybeSingle();
+  if (!appointment) return;
+  await runCheck(createAdminClient(), {
+    patientId: appointment.patient_id,
+    doctorId: user.id,
+    appointmentId: appointment.id,
+    prescriptionId: null,
+  });
+  refresh();
+}
+
+/**
+ * Runs the drug check on the patient's whole active list and saves it with
+ * the AI's plain-language explanation of each finding, for the doctor to review.
+ */
+async function runCheck(
+  admin: ReturnType<typeof createAdminClient>,
+  opts: { patientId: string; doctorId: string; appointmentId: string; prescriptionId: string | null },
+) {
   const started = Date.now();
-  const { flags, medicationsChecked } = await findProblems(admin, appointment.patient_id);
+  const { flags, medicationsChecked } = await findProblems(admin, opts.patientId);
   const durationMs = Date.now() - started;
 
-  const { data: check, error: checkError } = await admin
+  const { data: check } = await admin
     .from("reconciliation_checks")
     .insert({
-      patient_id: appointment.patient_id,
-      doctor_id: user.id,
-      appointment_id: appointment.id,
-      new_prescription_id: prescription.id,
+      patient_id: opts.patientId,
+      doctor_id: opts.doctorId,
+      appointment_id: opts.appointmentId,
+      new_prescription_id: opts.prescriptionId,
       medications_checked: medicationsChecked,
       duration_ms: durationMs,
     })
     .select("id")
     .single();
-  if (checkError || !check) return { error: "The prescription was saved, but the check failed. Please try again." };
+  if (!check) return null;
 
   if (flags.length) {
     const explanations = await explainFindings(
@@ -144,14 +189,14 @@ export async function createPrescription(
       })),
     );
   }
+  return { flags: flags.length, medicationsChecked, durationMs };
+}
 
-  refresh();
+function checkSummary({ flags, medicationsChecked, durationMs }: { flags: number; medicationsChecked: number; durationMs: number }) {
   const seconds = (durationMs / 1000).toFixed(1);
-  return {
-    success: flags.length
-      ? `Checked ${medicationsChecked} medicines in ${seconds} s. ${flags.length} warning${flags.length > 1 ? "s" : ""} to review below.`
-      : `Checked ${medicationsChecked} medicines in ${seconds} s. No problems found.`,
-  };
+  return flags
+    ? `Checked ${medicationsChecked} medicines in ${seconds} s. ${flags} warning${flags > 1 ? "s" : ""} to review below.`
+    : `Checked ${medicationsChecked} medicines in ${seconds} s. No problems found.`;
 }
 
 const allowed = {

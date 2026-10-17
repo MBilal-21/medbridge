@@ -30,8 +30,17 @@ export type DecisionMedicine = {
   details: string;
   prescribedBy: string | null;
   isNew: boolean;
-  flagged: boolean;
+  /** Problems the check found with this medicine, e.g. "Interacts with Zestril". */
+  problems: { text: string; severity: "high" | "moderate" | "low" }[];
 };
+
+const problemTones = {
+  high: "border-stop bg-stop-soft text-stop",
+  moderate: "border-change bg-change-soft text-change",
+  low: "border-border-strong bg-surface-muted text-muted",
+} as const;
+const severityRank = { high: 0, moderate: 1, low: 2 } as const;
+const worst = (m: DecisionMedicine) => Math.min(3, ...m.problems.map((p) => severityRank[p.severity]));
 
 /** One decision per medicine on the full list. The patient gets exactly this list. */
 export function DecisionForm({ checkId, medicines }: { checkId: string; medicines: DecisionMedicine[] }) {
@@ -43,19 +52,39 @@ export function DecisionForm({ checkId, medicines }: { checkId: string; medicine
   return (
     <form action={action} className="flex flex-col gap-4">
       <ul className="divide-y divide-border">
-        {medicines.map((m) => {
+        {[...medicines].sort((a, b) => worst(a) - worst(b)).map((m) => {
           const options: Choice[] = m.isNew ? ["new", "change", "stop"] : ["continue", "change", "stop"];
           return (
-            <li key={m.id} className="flex flex-col gap-3 py-4">
+            <li
+              key={m.id}
+              className={cn(
+                "flex flex-col gap-3 py-4",
+                m.problems.length > 0 && "-mx-3 rounded-control bg-change-soft/30 px-3",
+              )}
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="flex items-center gap-2 font-semibold">
-                    {m.flagged && <WarningIcon className="size-4 shrink-0 text-change" aria-label="Has a warning" />}
+                    {m.problems.length > 0 && (
+                      <WarningIcon className="size-4 shrink-0 text-change" aria-label="Has a warning" />
+                    )}
                     {m.name}
                   </p>
                   <p className="tabular text-sm text-muted">{m.details || "No dose details"}</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {m.isNew ? <Tag>This prescription</Tag> : m.prescribedBy && <Tag>{m.prescribedBy}</Tag>}
+                    {m.problems.map((p) => (
+                      <span
+                        key={p.text}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-sm font-medium",
+                          problemTones[p.severity],
+                        )}
+                      >
+                        <WarningIcon className="size-3.5 shrink-0" />
+                        {p.text}
+                      </span>
+                    ))}
                   </div>
                 </div>
                 <fieldset className="flex flex-wrap gap-2">
