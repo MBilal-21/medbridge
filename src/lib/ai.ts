@@ -2,7 +2,9 @@ import "server-only";
 import Groq from "groq-sdk";
 import { z } from "zod";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Created on first use, not at import: the key only exists at runtime, not during `next build`.
+let client: Groq | undefined;
+const groq = () => (client ??= new Groq({ apiKey: process.env.GROQ_API_KEY }));
 const VISION_MODEL = process.env.GROQ_VISION_MODEL ?? "qwen/qwen3.8-27b";
 const TEXT_MODEL = process.env.GROQ_TEXT_MODEL ?? "openai/gpt-oss-120b";
 
@@ -40,7 +42,7 @@ If the image is not a prescription, return {"medicines": []}.`;
 
 /** Reads the medicines on a prescription photo. The patient checks every line before it is saved. */
 export async function readPrescriptionPhoto(imageUrl: string): Promise<PrescriptionReading> {
-  const res = await groq.chat.completions.create({
+  const res = await groq().chat.completions.create({
     model: VISION_MODEL,
     temperature: 0,
     response_format: { type: "json_object" },
@@ -71,7 +73,7 @@ export async function explainFindings(
 ): Promise<Map<string, string>> {
   if (!findings.length) return new Map();
   try {
-    const res = await groq.chat.completions.create({
+    const res = await groq().chat.completions.create({
       model: TEXT_MODEL,
       temperature: 0.2,
       response_format: { type: "json_object" },

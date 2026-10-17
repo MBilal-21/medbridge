@@ -1,7 +1,9 @@
 import "server-only";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Created on first use, not at import: the key only exists at runtime, not during `next build`.
+let client: Resend | undefined;
+const resend = () => (client ??= new Resend(process.env.RESEND_API_KEY));
 
 type Attachment = { filename: string; content: string | Buffer };
 
@@ -11,7 +13,7 @@ export async function sendEmail(opts: {
   html: string;
   attachments?: Attachment[];
 }) {
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await resend().emails.send({
     from: process.env.EMAIL_FROM ?? "onboarding@resend.dev",
     ...opts,
   });
