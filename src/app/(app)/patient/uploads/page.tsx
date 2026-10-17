@@ -6,7 +6,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState, LoadingBlock, PageTitle, formatDateTime } from "@/components/page-parts";
 import type { PrescriptionReading } from "@/lib/ai";
 import { requireRole } from "@/lib/auth";
-import { frequencyForTimes } from "@/lib/frequencies";
+import { frequencyForTimes, timesFromPattern } from "@/lib/frequencies";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/cn";
@@ -104,7 +104,8 @@ async function UploadList() {
                     medicines={reading.medicines.map((m) => ({
                       name: m.name,
                       strength: m.strength ?? "",
-                      frequency: frequencyForTimes(m.dose_times),
+                      // The AI's times, or the fixed rule for "1 + 0 + 1" if it gave none.
+                      frequency: frequencyForTimes(m.dose_times.length ? m.dose_times : timesFromPattern(m.frequency)),
                       instructions: [m.dose, m.instructions].filter(Boolean).join(", "),
                       confidence: m.confidence,
                     }))}

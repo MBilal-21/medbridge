@@ -7,6 +7,10 @@ let client: Groq | undefined;
 const groq = () => (client ??= new Groq({ apiKey: process.env.GROQ_API_KEY }));
 const VISION_MODEL = process.env.GROQ_VISION_MODEL ?? "qwen/qwen3.8-27b";
 const TEXT_MODEL = process.env.GROQ_TEXT_MODEL ?? "openai/gpt-oss-120b";
+// Groq counts the requested maximum against a per-minute output limit (1,000
+// tokens on the free tier), and with no cap it assumes the model maximum and
+// refuses the call. A full prescription reading is ~100-500 tokens.
+const MAX_OUTPUT_TOKENS = 600;
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
@@ -36,7 +40,9 @@ Reply with JSON only:
 {"doctor_name": string|null, "prescribed_on": "YYYY-MM-DD"|null,
  "medicines": [{"name": brand or generic name as written, "strength": e.g. "500 mg"|null,
    "dose": e.g. "1 tablet"|null, "frequency": e.g. "Twice a day"|null,
-   "dose_times": 24h times like ["08:00","20:00"] if the frequency implies them (1+0+1 means morning and night), else [],
+   "dose_times": 24h times implied by the frequency, else []. Pakistani "morning+afternoon+night" notation:
+     1+0+0 = ["08:00"], 0+0+1 = ["21:00"], 1+0+1 = ["08:00","20:00"], 1+1+1 = ["08:00","14:00","20:00"],
+     1+1+1+1 = ["08:00","12:00","16:00","20:00"]. "SOS" or "when needed" = [],
    "instructions": e.g. "After meals"|null, "confidence": 0 to 1, how sure you are you read this line correctly}]}
 If the image is not a prescription, return {"medicines": []}.`;
 
@@ -45,6 +51,7 @@ export async function readPrescriptionPhoto(imageUrl: string): Promise<Prescript
   const res = await groq().chat.completions.create({
     model: VISION_MODEL,
     temperature: 0,
+    max_completion_tokens: MAX_OUTPUT_TOKENS,
     response_format: { type: "json_object" },
     messages: [
       {
@@ -76,6 +83,8 @@ export async function explainFindings(
     const res = await groq().chat.completions.create({
       model: TEXT_MODEL,
       temperature: 0.2,
+      max_completion_tokens: MAX_OUTPUT_TOKENS,
+      reasoning_effort: "low",
       response_format: { type: "json_object" },
       messages: [
         {

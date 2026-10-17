@@ -1,10 +1,11 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { readPrescriptionPhoto } from "@/lib/ai";
 import { requireRole } from "@/lib/auth";
-import { matchProduct } from "@/lib/drugs";
+import { findProblems, matchProduct } from "@/lib/drugs";
 import { formValues, type FormState } from "@/lib/form-state";
 import { frequencyByValue } from "@/lib/frequencies";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -213,8 +214,13 @@ export async function confirmUpload(uploadId: string, _prev: FormState, formData
   }
 
   await supabase.from("prescription_uploads").update({ status: "confirmed" }).eq("id", upload.id);
-  refresh();
-  return { success: `${medicines.length} medicine${medicines.length > 1 ? "s" : ""} added to your list.` };
+
+  // Check the whole list now, including the online RxNorm and FDA-label lookups,
+  // so the patient and their doctors see any clash with these medicines at once.
+  const { flags } = await findProblems(admin, user.id);
+  // The confirmed photo's form disappears, so show the result where it matters:
+  // the Today page, scrolled to any problems found.
+  redirect(flags.length ? "/patient#problems" : "/patient");
 }
 
 export async function deleteUpload(uploadId: string) {
