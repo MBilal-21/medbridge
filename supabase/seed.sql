@@ -15,7 +15,8 @@ insert into public.ingredients (rxcui, name) values
   ('36567', 'simvastatin'),
   ('21212', 'clarithromycin'),
   ('29046', 'lisinopril'),
-  ('9997',  'spironolactone')
+  ('9997',  'spironolactone'),
+  ('3355',  'diclofenac')
 on conflict (rxcui) do nothing;
 
 with products (brand_name, strength, dose_form, ingredient) as (
@@ -32,7 +33,9 @@ with products (brand_name, strength, dose_form, ingredient) as (
     ('Zocor',      '20 mg',    'tablet',     '36567'),
     ('Klaricid',   '500 mg',   'tablet',     '21212'),
     ('Zestril',    '10 mg',    'tablet',     '29046'),
-    ('Aldactone',  '25 mg',    'tablet',     '9997')
+    ('Aldactone',  '25 mg',    'tablet',     '9997'),
+    ('Nurofen',    '200 mg',   'tablet',     '5640'),
+    ('Voren',      '50 mg',    'tablet',     '3355')
 ),
 inserted as (
   insert into public.drug_products (brand_name, strength, dose_form)
@@ -55,6 +58,12 @@ from (values
   ('36567', '21212', 'high',     'Clarithromycin raises simvastatin levels, risking muscle damage.'),
   ('1191',  '5640',  'moderate', 'Ibuprofen can reduce the protective effect of low-dose aspirin and adds stomach bleeding risk.'),
   ('32968', '7646',  'moderate', 'Omeprazole can make clopidogrel less effective.'),
-  ('29046', '9997',  'moderate', 'Lisinopril with spironolactone can raise potassium to unsafe levels.')
+  ('29046', '9997',  'moderate', 'Lisinopril with spironolactone can raise potassium to unsafe levels.'),
+  -- Arthritis painkillers (NSAIDs) with blood pressure medicines: the multi-doctor
+  -- example in final_idea.md. Illustrative; have a doctor check before presenting.
+  ('5640',  '29046', 'moderate', 'Ibuprofen can raise blood pressure, weaken the effect of lisinopril and, taken together, strain the kidneys.'),
+  ('3355',  '29046', 'moderate', 'Diclofenac can raise blood pressure, weaken the effect of lisinopril and, taken together, strain the kidneys.'),
+  ('5640',  '17767', 'low',      'Ibuprofen can raise blood pressure and make amlodipine less effective.'),
+  ('3355',  '17767', 'low',      'Diclofenac can raise blood pressure and make amlodipine less effective.')
 ) as t (a, b, severity, description)
 on conflict (ingredient_a, ingredient_b) do nothing;

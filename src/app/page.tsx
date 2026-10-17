@@ -48,9 +48,10 @@ export default function Home() {
               One medicine list per patient, across every doctor.
             </h1>
             <p className="text-lg text-muted">
-              Patients see several doctors, and no one sees the whole list. MedBridge checks every
-              new prescription against everything the patient already takes, and the doctor
-              decides what to do.
+              Patients with several long-term conditions see a different doctor for each one. Each
+              doctor prescribes correctly for their own condition, but no one sees the combined
+              list. MedBridge keeps one list across all of them, checks every new prescription
+              against it, and the doctor decides what to do.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/signup" className={buttonClasses("primary", "lg")}>
@@ -64,15 +65,20 @@ export default function Home() {
 
           {/* Preview of what a doctor sees after a check. */}
           <Card className="flex flex-col gap-3" aria-label="Example check result">
-            <p className="text-sm font-medium text-muted">Example check · 4 medicines</p>
-            <div className="rounded-control border border-l-4 border-border border-l-stop p-3">
-              <SeverityBadge severity="high" />
-              <p className="mt-2 font-semibold">Coumadin (warfarin) + Disprin (aspirin)</p>
-              <p className="text-sm text-muted">Higher risk of serious bleeding.</p>
+            <p className="text-sm font-medium text-muted">
+              Example check · diabetes, blood pressure and arthritis · 3 doctors
+            </p>
+            <div className="rounded-control border border-l-4 border-border border-l-change p-3">
+              <SeverityBadge severity="moderate" />
+              <p className="mt-2 font-semibold">Brufen (ibuprofen) + Zestril (lisinopril)</p>
+              <p className="text-sm text-muted">
+                The arthritis painkiller can raise blood pressure and strain the kidneys.
+              </p>
             </div>
             <div className="rounded-control border border-l-4 border-border border-l-change p-3">
               <SeverityBadge severity="moderate" />
-              <p className="mt-2 font-semibold">Panadol and Calpol are both paracetamol</p>
+              <p className="mt-2 font-semibold">Brufen and Nurofen are both ibuprofen</p>
+              <p className="text-sm text-muted">An old painkiller nobody stopped.</p>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
               <DecisionBadge decision="stop" />
